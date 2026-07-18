@@ -4,11 +4,11 @@ services:
     container_name: chat-backend
     expose:
       - "8000"
-    restart: unless-stopped
+    restart: always
     networks:
       - chat-network
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/favicon.ico')"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -25,7 +25,7 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-    restart: unless-stopped
+    restart: always
     networks:
       - chat-network
 
