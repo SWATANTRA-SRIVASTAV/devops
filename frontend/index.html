@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Real-Time Chat | FastAPI</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
@@ -225,8 +225,9 @@
         #send-btn:hover { background-color: var(--accent-hover); }
 
         @media (max-width: 640px) {
-            .chat-container { height: 100vh; border-radius: 0; border: none; }
+            .chat-container { height: 100vh; height: 100dvh; border-radius: 0; border: none; }
             .message { max-width: 85%; }
+            .chat-input-area { padding-bottom: max(20px, env(safe-area-inset-bottom)); }
         }
     </style>
 </head>
