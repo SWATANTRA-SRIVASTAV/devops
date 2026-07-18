@@ -3,6 +3,16 @@
 A FastAPI WebSocket chat application, containerized behind an Nginx reverse
 proxy, deployed to a cloud VM with an automated GitHub Actions CI/CD pipeline.
 
+## Live deployment
+
+**Public IP:** http://161.118.170.239
+
+Verified working: chat UI loads and connects, multi-user real-time
+messaging confirmed across separate devices/networks (desktop + mobile,
+different ISPs), containers survive both a killed process and a full VM
+reboot without manual intervention, and pushes to `main` auto-deploy via
+GitHub Actions.
+
 ![Architecture](docs/architecture.svg)
 
 ## Project overview
@@ -55,17 +65,44 @@ Two separate bugs in the same block:
 
 ### Additional hardening beyond the minimum fix
 
-- Added a `HEALTHCHECK` to the backend image and wired
-  `depends_on: condition: service_healthy` in Compose, so Nginx only starts
-  routing traffic once the backend is actually accepting connections —
-  not just once the container process has started.
-- `restart: unless-stopped` on both services, so they come back up after a
-  crash or a host reboot (systemd starts the Docker daemon on boot, and
-  Docker restarts containers with this policy).
+- Added a `HEALTHCHECK` to the backend image (probing `/favicon.ico`, which
+  always returns 204 regardless of whether the frontend files are present in
+  this container) and wired `depends_on: condition: service_healthy` in
+  Compose, so Nginx only starts routing traffic once the backend is actually
+  accepting connections — not just once the container process has started.
+- `restart: always` on both services, per the assignment's stated
+  requirement — containers come back up after a crash or a host reboot
+  (systemd starts the Docker daemon on boot, and Docker restarts containers
+  with this policy). Verified by killing the backend's process directly
+  (`docker exec chat-backend kill -9 1`) and by a full `sudo reboot` of the
+  VM — both times the container returned to a healthy state with no manual
+  intervention.
 - Explicit named bridge network (`chat-network`) instead of relying on the
   Compose default, for clarity when this grows past two services.
 - Dropped the obsolete `version: '3.8'` key — modern Docker Compose (v2)
   ignores it and prints a warning; the Compose spec no longer uses it.
+
+### Bug found during live testing (frontend, not infrastructure)
+
+While testing on an actual phone rather than desktop browser dev tools, the
+message input and send button were invisible — pushed below the visible
+viewport. Root cause: `frontend/index.html` sized the chat container with
+`100vh`/`95vh`, but mobile browsers include the address bar's height in
+`vh` calculations even though it isn't part of the visible viewport once
+shown. Combined with `overflow: hidden` on `body`, there was no way to
+scroll down to reach the input. Fixed by adding `100dvh` (dynamic viewport
+height, which tracks the actual visible area) alongside the `vh` fallback,
+plus `env(safe-area-inset-bottom)` padding on the input footer so it isn't
+crowded by gesture-navigation bars on notched devices. This is a frontend
+CSS fix only — no application logic, WebSocket handling, or backend code
+was touched.
+
+## Docker Compose version note
+
+`docker-compose.yml` omits the `version:` key seen in the original file
+(e.g. `version: '3.8'`) — the Compose Specification deprecated this field,
+and modern `docker compose` (v2, the plugin form used throughout this
+project) prints a warning and ignores it if present.
 
 ## How Docker networking works here
 
