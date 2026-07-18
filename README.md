@@ -97,6 +97,17 @@ crowded by gesture-navigation bars on notched devices. This is a frontend
 CSS fix only — no application logic, WebSocket handling, or backend code
 was touched.
 
+### Timestamp timezone (infrastructure fix, not application code)
+
+Message timestamps were showing server time (UTC, the default for most
+cloud VM images) rather than the viewer's local time. Setting the VM's own
+OS timezone with `timedatectl` was not sufficient on its own — Docker
+containers have their own isolated filesystem and don't inherit the host's
+timezone automatically. Fixed by mounting the host's `/etc/localtime` and
+`/etc/timezone` into the `backend` container (read-only) in
+`docker-compose.yml`, so `datetime.now()` inside `app/main.py` resolves
+correctly without any change to the application code itself.
+
 ## Docker Compose version note
 
 `docker-compose.yml` omits the `version:` key seen in the original file
