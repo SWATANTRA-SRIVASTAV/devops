@@ -269,6 +269,7 @@
                 </button>
             </form>
             <div class="char-counter" id="char-counter">0 / 2500</div>
+            <div class="char-counter limit-reached" id="rate-limit-status" style="display: none;"></div>
         </footer>
     </div>
 
@@ -280,11 +281,46 @@
             const connectionStatus = document.getElementById('connection-status');
             const userCount = document.getElementById('user-count');
             const charCounter = document.getElementById('char-counter');
+            const rateLimitStatus = document.getElementById('rate-limit-status');
             const sendBtn = document.getElementById('send-btn');
 
             const MAX_MESSAGE_LENGTH = 2500;
-            const MIN_SEND_INTERVAL_MS = 400; // basic client-side spam/flood guard
-            let lastSendTime = 0;
+            const MAX_MESSAGES_PER_WINDOW = 5;
+            const RATE_WINDOW_MS = 10000; // sliding window: at most 5 messages per 10s
+            let sendTimestamps = []; // timestamps of recent sends, pruned each check
+            let cooldownTimer = null;
+
+            // Returns null if a send is allowed right now, or the number of
+            // milliseconds to wait if the sliding-window limit has been hit.
+            function getRateLimitWaitMs() {
+                const now = Date.now();
+                sendTimestamps = sendTimestamps.filter(t => now - t < RATE_WINDOW_MS);
+                if (sendTimestamps.length < MAX_MESSAGES_PER_WINDOW) return null;
+                const oldest = sendTimestamps[0];
+                return RATE_WINDOW_MS - (now - oldest);
+            }
+
+            function showRateLimitCooldown(waitMs) {
+                sendBtn.disabled = true;
+                input.disabled = true;
+                clearInterval(cooldownTimer);
+                const endAt = Date.now() + waitMs;
+                const tick = () => {
+                    const remaining = Math.ceil((endAt - Date.now()) / 1000);
+                    if (remaining <= 0) {
+                        clearInterval(cooldownTimer);
+                        rateLimitStatus.style.display = 'none';
+                        sendBtn.disabled = false;
+                        input.disabled = false;
+                        input.focus();
+                        return;
+                    }
+                    rateLimitStatus.style.display = 'block';
+                    rateLimitStatus.textContent = `Sending too fast — please wait ${remaining}s`;
+                };
+                tick();
+                cooldownTimer = setInterval(tick, 250);
+            }
 
             // Strips characters with no legitimate use in a chat message (control
             // characters, null bytes) and collapses excess whitespace. This is a
@@ -378,8 +414,11 @@
             form.addEventListener('submit', (e) => {
                 e.preventDefault();
 
-                const now = Date.now();
-                if (now - lastSendTime < MIN_SEND_INTERVAL_MS) return; // spam guard
+                const waitMs = getRateLimitWaitMs();
+                if (waitMs !== null) {
+                    showRateLimitCooldown(waitMs);
+                    return;
+                }
 
                 const msg = sanitizeInput(input.value);
                 if (!msg) return;
@@ -389,7 +428,7 @@
                     socket.send(msg);
                     input.value = '';
                     updateCharCounter();
-                    lastSendTime = now;
+                    sendTimestamps.push(Date.now());
                 }
             });
             

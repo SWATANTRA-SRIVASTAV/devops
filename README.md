@@ -116,9 +116,15 @@ was touched, per the assignment's instructions:
 - **2,500-character message limit**, enforced via the input's `maxlength`
   attribute and re-checked in JavaScript before sending, with a live counter
   shown to the user.
-- **Basic spam guard**: a 400ms minimum interval between sends, plus
-  stripping of control characters and collapsing of excess whitespace from
-  input before it's sent.
+- **Sliding-window rate limit**: at most 5 messages per rolling 10-second
+  window. Sending faster than that disables the input and send button and
+  shows a live countdown ("Sending too fast — please wait Ns") until the
+  window clears, rather than silently dropping messages. An earlier
+  flat 400ms-between-sends version was replaced with this, since a flat
+  interval alone still allowed a steady stream of ~2 messages/second, which
+  still looked and functioned like spam.
+- Input is also stripped of control characters and has excess whitespace
+  collapsed before being sent.
 
 **Honest scope note on "script injection" protection:** the existing
 frontend was already safe against XSS/script injection before any of this
