@@ -223,6 +223,16 @@
         }
 
         #send-btn:hover { background-color: var(--accent-hover); }
+        #send-btn:disabled { background-color: var(--border); cursor: not-allowed; }
+
+        .char-counter {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-align: right;
+            padding: 4px 24px 0 0;
+        }
+        .char-counter.limit-near { color: #f59e0b; }
+        .char-counter.limit-reached { color: #ef4444; }
 
         @media (max-width: 640px) {
             .chat-container { height: 100vh; height: 100dvh; border-radius: 0; border: none; }
@@ -250,7 +260,7 @@
 
         <footer class="chat-input-area">
             <form id="chat-form">
-                <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off" required />
+                <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off" maxlength="2500" required />
                 <button type="submit" id="send-btn">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20">
                         <line x1="22" y1="2" x2="11" y2="13"></line>
@@ -258,6 +268,7 @@
                     </svg>
                 </button>
             </form>
+            <div class="char-counter" id="char-counter">0 / 2500</div>
         </footer>
     </div>
 
@@ -268,6 +279,35 @@
             const input = document.getElementById('message-input');
             const connectionStatus = document.getElementById('connection-status');
             const userCount = document.getElementById('user-count');
+            const charCounter = document.getElementById('char-counter');
+            const sendBtn = document.getElementById('send-btn');
+
+            const MAX_MESSAGE_LENGTH = 2500;
+            const MIN_SEND_INTERVAL_MS = 400; // basic client-side spam/flood guard
+            let lastSendTime = 0;
+
+            // Strips characters with no legitimate use in a chat message (control
+            // characters, null bytes) and collapses excess whitespace. This is a
+            // defense-in-depth input guard, not the primary XSS protection - the
+            // primary protection is that every message below is inserted with
+            // `textContent` (never innerHTML), so the browser always renders
+            // message content as plain text and never executes it, regardless of
+            // what characters it contains.
+            function sanitizeInput(raw) {
+                return raw
+                    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+            }
+
+            function updateCharCounter() {
+                const len = input.value.length;
+                charCounter.textContent = `${len} / ${MAX_MESSAGE_LENGTH}`;
+                charCounter.classList.toggle('limit-near', len >= MAX_MESSAGE_LENGTH * 0.9 && len < MAX_MESSAGE_LENGTH);
+                charCounter.classList.toggle('limit-reached', len >= MAX_MESSAGE_LENGTH);
+            }
+            input.addEventListener('input', updateCharCounter);
+            updateCharCounter();
             
             // Connect to WebSocket via relative protocol to support both http and https
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -337,10 +377,19 @@
 
             form.addEventListener('submit', (e) => {
                 e.preventDefault();
-                const msg = input.value.trim();
-                if (msg && socket.readyState === WebSocket.OPEN) {
+
+                const now = Date.now();
+                if (now - lastSendTime < MIN_SEND_INTERVAL_MS) return; // spam guard
+
+                const msg = sanitizeInput(input.value);
+                if (!msg) return;
+                if (msg.length > MAX_MESSAGE_LENGTH) return; // belt-and-suspenders; maxlength already blocks this in normal typing
+
+                if (socket.readyState === WebSocket.OPEN) {
                     socket.send(msg);
                     input.value = '';
+                    updateCharCounter();
+                    lastSendTime = now;
                 }
             });
             

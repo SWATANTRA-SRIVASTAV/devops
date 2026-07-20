@@ -108,6 +108,40 @@ timezone automatically. Fixed by mounting the host's `/etc/localtime` and
 `docker-compose.yml`, so `datetime.now()` inside `app/main.py` resolves
 correctly without any change to the application code itself.
 
+### Frontend chat restrictions (added on top of the assignment's scope)
+
+Two client-side guards were added to `frontend/index.html` — no backend code
+was touched, per the assignment's instructions:
+
+- **2,500-character message limit**, enforced via the input's `maxlength`
+  attribute and re-checked in JavaScript before sending, with a live counter
+  shown to the user.
+- **Basic spam guard**: a 400ms minimum interval between sends, plus
+  stripping of control characters and collapsing of excess whitespace from
+  input before it's sent.
+
+**Honest scope note on "script injection" protection:** the existing
+frontend was already safe against XSS/script injection before any of this
+was added — every incoming message is inserted into the page using
+`element.textContent`, never `innerHTML`, so the browser always renders
+message content as inert plain text, even if someone sends literal
+`<script>` tags. No change was needed there.
+
+There is no SQL injection surface in this application at all — the backend
+(`app/main.py`) uses no database; it's a pure in-memory WebSocket broadcast
+between connected clients.
+
+**Important limitation, disclosed rather than hidden:** the character limit
+and spam guard above are client-side only. Since the assignment says not to
+modify the backend, they apply to anyone using the provided web UI, but a
+client that connects directly to the raw `/ws` WebSocket endpoint
+(bypassing the browser entirely, e.g. with a script or `wscat`) is not
+restricted by them, because `app/main.py` accepts and broadcasts any text
+it receives without validation. Enforcing these limits server-side —
+rejecting oversized messages, rate-limiting per connection — would require
+editing `app/main.py`, which is out of scope here. This is called out
+explicitly rather than presented as a complete security guarantee it isn't.
+
 ## Docker Compose version note
 
 `docker-compose.yml` omits the `version:` key seen in the original file
